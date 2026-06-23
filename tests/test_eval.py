@@ -11,7 +11,8 @@ def _store(emb):
             ("r2", "p2", "Bolt", 90, "audiophile studio sound")]
     ids, vecs, pl = [], [], []
     for rid, pid, brand, price, text in rows:
-        ids.append(rid); vecs.append(emb.embed([text])[0])
+        ids.append(rid)
+        vecs.append(emb.embed([text])[0])
         pl.append({"review_id": rid, "product_id": pid, "brand": brand, "category": "earbuds",
                    "price": price, "avg_rating": 4.4, "review_count": 100, "text": text})
     store.upsert(ids, vecs, pl)

@@ -2,7 +2,6 @@ import json
 
 from sage.models import Candidate
 from sage.judge.judge import judge_rank, build_judge_prompt
-from sage.providers.fakes import FakeLLMProvider
 
 
 def _cand(pid, brand, snippets, count=100):

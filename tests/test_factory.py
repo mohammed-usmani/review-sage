@@ -28,3 +28,13 @@ def test_build_llm_uses_fake_when_requested():
     s = Settings(hyde_provider="fake")
     llm = build_llm("hyde", s)
     assert llm.family == "fake"
+
+
+def test_build_llm_fake_judge_emits_valid_ranking_json():
+    import json
+
+    s = Settings(judge_provider="fake")
+    judge = build_llm("judge", s)
+    out = judge.generate("PRODUCT p1: brand=X\nPRODUCT p2: brand=Y")
+    data = json.loads(out)
+    assert [item["product_id"] for item in data["ranking"]] == ["p1", "p2"]

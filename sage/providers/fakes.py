@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from typing import Sequence
 
@@ -20,6 +21,21 @@ class FakeLLMProvider:
         if self._responses:
             return self._responses.pop(0)
         return self._default
+
+
+class FakeJudgeLLM:
+    """A fake judge that returns valid ranking JSON by reading the PRODUCT lines
+    in the prompt and keeping their given order. Lets the whole pipeline run with
+    zero API keys (e.g. SAGE_JUDGE_PROVIDER=fake) for local smoke runs."""
+
+    family = "fake"
+
+    def generate(self, prompt: str, *, temperature: float = 0.0) -> str:
+        ids: list[str] = []
+        for line in prompt.splitlines():
+            if line.startswith("PRODUCT "):
+                ids.append(line.split()[1].strip(":"))
+        return json.dumps({"ranking": [{"product_id": p, "reason": "fake judge"} for p in ids]})
 
 
 class FakeEmbeddingProvider:

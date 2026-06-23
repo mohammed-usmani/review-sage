@@ -4,7 +4,7 @@ import warnings
 
 from sage.config import Settings
 from sage.providers.base import EmbeddingProvider, LLMProvider
-from sage.providers.fakes import FakeEmbeddingProvider, FakeLLMProvider
+from sage.providers.fakes import FakeEmbeddingProvider, FakeJudgeLLM, FakeLLMProvider
 
 
 class SelfPreferenceError(RuntimeError):
@@ -26,6 +26,10 @@ def build_llm(role: str, settings: Settings) -> LLMProvider:
     provider = getattr(settings, f"{role}_provider")
     model = getattr(settings, f"{role}_model")
     if provider == "fake":
+        # The judge needs to emit valid ranking JSON; a generic stub string would
+        # crash json parsing. This makes the all-fake, zero-key path runnable.
+        if role == "judge":
+            return FakeJudgeLLM()
         return FakeLLMProvider(default=f"fake-{role}")
     if provider == "gemini":
         from sage.providers.gemini import GeminiLLM
