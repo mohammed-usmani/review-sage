@@ -27,7 +27,9 @@ class Candidate:
     chunk_ids: list[str]
 
     @classmethod
-    def from_chunks(cls, product_id: str, chunks: list[ReviewChunk]) -> "Candidate":
+    def from_chunks(cls, product_id: str, chunks: list[ReviewChunk]) -> Candidate:
+        if not chunks:
+            raise ValueError("from_chunks requires at least one chunk")
         first = chunks[0]
         return cls(
             product_id=product_id,

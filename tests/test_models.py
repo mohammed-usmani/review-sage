@@ -1,3 +1,5 @@
+import pytest
+
 from sage.models import ReviewChunk, Candidate, RankedProduct, RecommendResult
 
 
@@ -23,3 +25,17 @@ def test_recommend_result_holds_ranking():
     res = RecommendResult(query="q", mode="hyde", bias_on=True, ranked=[rp])
     assert res.ranked[0].rank == 1
     assert res.mode == "hyde"
+    assert res.bias_on is True
+    assert len(res.ranked) == 1
+
+
+def test_ranked_product_cited_snippets_default_empty():
+    cand = Candidate(product_id="p1", brand="Acme", category="earbuds", price=80.0,
+                     avg_rating=4.5, review_count=120, snippets=["x"], chunk_ids=["r1"])
+    rp = RankedProduct(candidate=cand, rank=1, reasoning="best")
+    assert rp.cited_snippet_ids == []
+
+
+def test_from_chunks_rejects_empty():
+    with pytest.raises(ValueError):
+        Candidate.from_chunks("p1", [])
