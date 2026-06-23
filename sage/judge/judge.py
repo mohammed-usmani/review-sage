@@ -22,7 +22,8 @@ def build_judge_prompt(query: str, candidates: list[Candidate]) -> str:
     blocks = []
     for c in candidates:
         vol = normalized_review_count(c.review_count)
-        snippets = " | ".join(c.snippets)
+        snippets = " | ".join(c.snippets) if c.snippets else "(no review text)"
+        # price rounded to whole dollars on purpose: removes cent-level anchoring.
         blocks.append(
             f"PRODUCT {c.product_id}: brand={c.brand} price=${c.price:.0f} "
             f"rating={c.avg_rating} review_volume={vol:.2f}\n  reviews: {snippets}"
@@ -30,17 +31,31 @@ def build_judge_prompt(query: str, candidates: list[Candidate]) -> str:
     return JUDGE_INSTRUCTIONS.format(query=query, products="\n".join(blocks))
 
 
-def _rank_once(query: str, candidates: list[Candidate], llm: LLMProvider) -> list[str]:
-    prompt = build_judge_prompt(query, candidates)
-    raw = llm.generate(prompt, temperature=0.0)
-    data = json.loads(raw)
-    return [item["product_id"] for item in data["ranking"]]
+def _loads_json(raw: str) -> dict:
+    """Parse model JSON, tolerating ```json fences and surrounding prose that
+    real LLMs (esp. Gemini/OpenAI without JSON mode) tend to add."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text[3:]
+        if text[:4].lower() == "json":
+            text = text[4:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # last resort: extract the outermost {...}
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            return json.loads(text[start : end + 1])
+        raise
 
 
-def _reasons_from(query: str, candidates: list[Candidate], llm: LLMProvider) -> dict[str, str]:
-    prompt = build_judge_prompt(query, candidates)
-    data = json.loads(llm.generate(prompt, temperature=0.0))
-    return {item["product_id"]: item.get("reason", "") for item in data["ranking"]}
+def _rank_once(query: str, candidates: list[Candidate], llm: LLMProvider) -> list[dict]:
+    """Return the LLM's ranking as a list of {product_id, reason} items."""
+    data = _loads_json(llm.generate(build_judge_prompt(query, candidates), temperature=0.0))
+    return data["ranking"]
 
 
 def judge_rank(
@@ -71,19 +86,32 @@ def judge_rank(
         prepared = candidates
         variants = [prepared]
 
-    # aggregate mean rank position across orderings (lower = better)
-    rank_sums: dict[str, float] = {c.product_id: 0.0 for c in prepared}
-    counts: dict[str, int] = {c.product_id: 0 for c in prepared}
-    for variant in variants:
-        order = _rank_once(query, variant, llm)
-        for position, pid in enumerate(order):
-            rank_sums[pid] += position
-            counts[pid] += 1
+    valid_ids = {c.product_id for c in prepared}
+    n_products = len(prepared)
 
-    mean_rank = {pid: rank_sums[pid] / max(counts[pid], 1) for pid in rank_sums}
+    # Aggregate mean rank position across orderings (lower = better). Robustness:
+    #  - unknown/hallucinated ids returned by the LLM are ignored
+    #  - a product the LLM OMITS in a variant gets the worst position for that
+    #    variant (never accidentally promoted to rank 0)
+    #  - duplicate ids within one ranking count only on first appearance
+    rank_sums: dict[str, float] = {pid: 0.0 for pid in valid_ids}
+    first_reasons: dict[str, str] = {}
+    for v_idx, variant in enumerate(variants):
+        ranking = _rank_once(query, variant, llm)
+        positions: dict[str, int] = {}
+        next_pos = 0
+        for item in ranking:
+            pid = item.get("product_id")
+            if pid in valid_ids and pid not in positions:
+                positions[pid] = next_pos
+                next_pos += 1
+                if v_idx == 0:
+                    first_reasons[pid] = item.get("reason", "")
+        for pid in rank_sums:
+            rank_sums[pid] += positions.get(pid, n_products)
+
+    mean_rank = {pid: rank_sums[pid] / len(variants) for pid in rank_sums}
     final_order = sorted(mean_rank, key=lambda pid: (mean_rank[pid], pid))
-
-    reasons = _reasons_from(query, variants[0], llm)
 
     ranked: list[RankedProduct] = []
     for i, pid in enumerate(final_order, start=1):
@@ -92,7 +120,7 @@ def judge_rank(
             RankedProduct(
                 candidate=cand,
                 rank=i,
-                reasoning=reasons.get(pid, ""),
+                reasoning=first_reasons.get(pid, ""),
                 cited_snippet_ids=cand.chunk_ids,
             )
         )
