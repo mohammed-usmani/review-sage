@@ -8,14 +8,22 @@ def _vec(seed: float, dim: int = 8) -> list[float]:
     return [seed] * dim
 
 
+def _onehot(i: int, dim: int = 8) -> list[float]:
+    v = [0.0] * dim
+    v[i] = 1.0
+    return v
+
+
 def test_search_returns_nearest_first():
+    # Non-collinear vectors: "b" aligns with the query, "a" is orthogonal, so
+    # cosine genuinely orders them (collinear vectors would tie at 1.0).
     store = FaissStore(dim=8)
     store.upsert(
         ids=["a", "b"],
-        vectors=[_vec(0.1), _vec(0.9)],
+        vectors=[_onehot(1), _onehot(0)],
         payloads=[{"product_id": "pa", "price": 50}, {"product_id": "pb", "price": 50}],
     )
-    hits = store.search(_vec(0.9), top_k=2)
+    hits = store.search(_onehot(0), top_k=2)
     assert hits[0].id == "b"
     assert hits[0].payload["product_id"] == "pb"
 

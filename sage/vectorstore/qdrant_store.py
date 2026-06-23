@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+import uuid
 
 from sage.vectorstore.base import Filter, SearchHit
 
@@ -27,12 +27,23 @@ class QdrantStore:
         self._client.delete_collection(self.collection)
         self._ensure_collection()
 
+    @staticmethod
+    def _point_id(ext_id: str) -> str:
+        # Deterministic UUID per external id: collision-safe and idempotent on
+        # re-upsert (the same review id always maps to the same point).
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, ext_id))
+
     def upsert(self, ids, vectors, payloads) -> None:
         from qdrant_client.models import PointStruct
 
+        if not (len(ids) == len(vectors) == len(payloads)):
+            raise ValueError(
+                f"upsert length mismatch: {len(ids)} ids, {len(vectors)} vectors, "
+                f"{len(payloads)} payloads"
+            )
         points = [
-            PointStruct(id=i, vector=list(v), payload={**p, "_ext_id": ext})
-            for i, (ext, v, p) in enumerate(zip(ids, vectors, payloads))
+            PointStruct(id=self._point_id(ext), vector=list(v), payload={**p, "_ext_id": ext})
+            for ext, v, p in zip(ids, vectors, payloads)
         ]
         self._client.upsert(self.collection, points=points)
 
@@ -49,15 +60,15 @@ class QdrantStore:
         return QFilter(must=must) if must else None
 
     def search(self, vector, top_k, flt: Filter | None = None) -> list[SearchHit]:
-        res = self._client.search(
+        res = self._client.query_points(
             self.collection,
-            query_vector=list(vector),
+            query=list(vector),
             limit=top_k,
             query_filter=self._build_filter(flt),
             with_payload=True,
         )
         out = []
-        for p in res:
+        for p in res.points:
             payload = dict(p.payload or {})
             ext = payload.pop("_ext_id", str(p.id))
             out.append(SearchHit(id=ext, score=float(p.score), payload=payload))
