@@ -54,12 +54,30 @@ def build_embedder(settings: Settings) -> EmbeddingProvider:
     provider = settings.embedding_provider
     if provider == "fake":
         return FakeEmbeddingProvider()
-    if provider in ("gemini", "vertex"):
+    if provider == "gemini":
         from sage.providers.gemini import GeminiEmbedding
 
         return GeminiEmbedding(settings.embedding_model)
+    if provider == "vertex":
+        from sage.providers.gemini import VertexEmbedding
+
+        return VertexEmbedding(settings.embedding_model)
     if provider == "openai":
         from sage.providers.openai import OpenAIEmbedding
 
         return OpenAIEmbedding(settings.embedding_model)
     raise ValueError(f"unknown embedding provider: {provider}")
+
+
+def build_role_llms(settings: Settings) -> tuple[LLMProvider, LLMProvider]:
+    """Build the (hyde_generator, judge) LLM pair and enforce the self-preference
+    guard. This is the composition entry point callers should use so the judge is
+    never the same family as the generator unless explicitly allowed."""
+    hyde_llm = build_llm("hyde", settings)
+    judge_llm = build_llm("judge", settings)
+    assert_distinct_families(
+        hyde_family=hyde_llm.family,
+        judge_family=judge_llm.family,
+        allow_same=settings.allow_same_family_judge,
+    )
+    return hyde_llm, judge_llm

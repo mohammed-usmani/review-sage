@@ -24,7 +24,10 @@ class OpenAILLM:
             temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.choices[0].message.content
+        content = resp.choices[0].message.content
+        if content is None:
+            raise RuntimeError("OpenAI returned no content (empty or refused completion)")
+        return content
 
 
 class OpenAIEmbedding:

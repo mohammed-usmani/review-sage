@@ -113,6 +113,8 @@ def test_gemini_llm_and_embedding(monkeypatch):
     assert emb.embed(["x"]) == [[0.3, 0.4]]
     assert emb.dim == 768
     assert emb.family == "gemini"
+    # must request truncation to the index dimension, else real vectors are 3072-d
+    assert captured["embed"]["config"] == {"output_dimensionality": 768}
 
 
 def test_vertex_uses_vertexai_client(monkeypatch):
@@ -123,3 +125,14 @@ def test_vertex_uses_vertexai_client(monkeypatch):
     assert llm.generate("hi") == "GEMINI_OUT"
     assert captured["client_kwargs"] == {"vertexai": True}
     assert llm.family == "vertex"
+
+
+def test_vertex_embedding_uses_vertexai_client(monkeypatch):
+    from sage.providers.gemini import VertexEmbedding
+
+    captured = {}
+    _install_genai(monkeypatch, captured)
+    emb = VertexEmbedding("gemini-embedding-001")
+    assert emb.embed(["x"]) == [[0.3, 0.4]]
+    assert captured["client_kwargs"] == {"vertexai": True}
+    assert emb.family == "vertex"

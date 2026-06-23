@@ -8,7 +8,7 @@ from sage.config import Settings
 from sage.eval.run_ablation import ablate
 from sage.ingest import ingest
 from sage.pipeline import recommend
-from sage.providers.factory import assert_distinct_families, build_embedder, build_llm
+from sage.providers.factory import build_embedder, build_llm, build_role_llms
 from sage.runtime import build_store
 from sage.vectorstore.base import Filter
 
@@ -40,12 +40,7 @@ def recommend_cmd(
 ) -> None:
     """Rank products for a query."""
     settings, embedder, store = _embedder_and_store()
-    hyde_llm = build_llm("hyde", settings)
-    judge_llm = build_llm("judge", settings)
-    assert_distinct_families(
-        hyde_family=hyde_llm.family, judge_family=judge_llm.family,
-        allow_same=settings.allow_same_family_judge,
-    )
+    hyde_llm, judge_llm = build_role_llms(settings)
     res = recommend(
         query, mode=mode, bias_on=bias, flt=Filter(category=category, price_max=price_max),
         embedder=embedder, store=store, hyde_llm=hyde_llm, judge_llm=judge_llm, settings=settings,
