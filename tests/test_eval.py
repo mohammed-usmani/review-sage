@@ -18,6 +18,23 @@ def _store(emb):
     return store
 
 
+def test_ablate_jaccard_zero_when_hyde_changes_retrieval():
+    # With one candidate slot, naive ("gym") lands on p1 while the HyDE doc
+    # ("audiophile studio sound") lands on p2 -> disjoint sets -> jaccard 0.0.
+    emb = FakeEmbeddingProvider(dim=32)
+    store = _store(emb)
+    rows = ablate(
+        queries=["stays in at the gym sweatproof"], flt=Filter(category="earbuds"),
+        embedder=emb, store=store,
+        make_hyde_llm=lambda: FakeLLMProvider(responses=["audiophile studio sound"]),
+        settings=Settings(max_candidates=1),
+    )
+    r = rows[0]
+    assert r.naive_products == ["p1"]
+    assert r.hyde_products == ["p2"]
+    assert r.jaccard == 0.0
+
+
 def test_ablate_reports_per_query_candidate_sets():
     emb = FakeEmbeddingProvider(dim=32)
     store = _store(emb)

@@ -18,7 +18,13 @@ class AblationRow:
     jaccard: float
 
 
-def _product_ids(text, embedder, store, flt, settings) -> list[str]:
+def _product_ids(
+    text: str,
+    embedder: EmbeddingProvider,
+    store: VectorStore,
+    flt: Filter | None,
+    settings: Settings,
+) -> list[str]:
     cands = retrieve_candidates(
         text, embedder=embedder, store=store, flt=flt, top_k=settings.top_k,
         max_candidates=settings.max_candidates, max_snippets=settings.max_snippets,
