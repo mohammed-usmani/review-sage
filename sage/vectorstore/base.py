@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 
 @dataclass
@@ -24,6 +24,7 @@ class SearchHit:
     payload: dict
 
 
+@runtime_checkable
 class VectorStore(Protocol):
     dim: int
 

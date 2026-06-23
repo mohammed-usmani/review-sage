@@ -26,6 +26,11 @@ class FaissStore:
         return arr / norms
 
     def upsert(self, ids, vectors, payloads) -> None:
+        if not (len(ids) == len(vectors) == len(payloads)):
+            raise ValueError(
+                f"upsert length mismatch: {len(ids)} ids, {len(vectors)} vectors, "
+                f"{len(payloads)} payloads"
+            )
         self._index.add(self._normed(vectors))
         self._ids.extend(ids)
         self._payloads.extend(payloads)
@@ -33,7 +38,11 @@ class FaissStore:
     def search(self, vector, top_k, flt: Filter | None = None) -> list[SearchHit]:
         if not self._ids:
             return []
-        over = min(len(self._ids), max(top_k * 5, top_k))
+        # With a filter, scan the whole index so a selective filter cannot miss
+        # matching items that rank below the over-fetch window. Without one, the
+        # top_k*5 over-fetch is plenty. (Qdrant filters natively; this is the
+        # in-process fallback.)
+        over = len(self._ids) if flt is not None else min(len(self._ids), top_k * 5)
         q = self._normed([vector])
         scores, idxs = self._index.search(q, over)
         out: list[SearchHit] = []
