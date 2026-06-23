@@ -50,3 +50,25 @@ def test_compare_returns_all_four_combinations():
     )
     assert set(out.keys()) == {"naive_bias_off", "naive_bias_on", "hyde_bias_off", "hyde_bias_on"}
     assert all(isinstance(v, RecommendResult) for v in out.values())
+
+
+def test_compare_uses_fresh_llm_per_combination():
+    # Each combo must get its own LLM instance (scripted fakes would otherwise
+    # exhaust). Guards against a future refactor hoisting the factory call.
+    emb, store = _build()
+    from sage.providers.fakes import FakeLLMProvider
+
+    judge_instances = []
+
+    def make_judge():
+        j = RankByProductLLM()
+        judge_instances.append(j)
+        return j
+
+    compare(
+        "best gym earbuds", flt=Filter(category="earbuds"), embedder=emb, store=store,
+        make_hyde_llm=lambda: FakeLLMProvider(responses=["stays in at gym"]),
+        make_judge_llm=make_judge, settings=Settings(),
+    )
+    assert len(judge_instances) == 4  # one per combination
+    assert len({id(j) for j in judge_instances}) == 4  # all distinct objects
