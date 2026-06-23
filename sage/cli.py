@@ -58,7 +58,8 @@ def recommend_cmd(
 def eval_cmd(queries_file: str, category: str = "earbuds") -> None:
     """Run the naive-vs-HyDE ablation over a newline-delimited queries file."""
     settings, embedder, store = _embedder_and_store()
-    queries = [q.strip() for q in open(queries_file, encoding="utf-8") if q.strip()]
+    with open(queries_file, encoding="utf-8") as fh:
+        queries = [q.strip() for q in fh if q.strip()]
     rows = ablate(
         queries=queries, flt=Filter(category=category), embedder=embedder, store=store,
         make_hyde_llm=lambda: build_llm("hyde", settings), settings=settings,

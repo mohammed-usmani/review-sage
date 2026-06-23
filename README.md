@@ -38,7 +38,7 @@ All settings are controlled via `SAGE_*` environment variables (or a `.env` file
 | `SAGE_COLLECTION` | `reviews` | Qdrant collection name |
 | `SAGE_TOP_K` | `40` | Candidate pool size for retrieval |
 | `SAGE_MAX_CANDIDATES` | `6` | Maximum distinct products to rank |
-| `SAGE_ALLOW_SAME_FAMILY_JUDGE` | `false` | Disable self-preference guard |
+| `SAGE_ALLOW_SAME_FAMILY_JUDGE` | `false` | Allow the judge to share the generator's model family (bypasses the self-preference guard; emits a warning). The guard is **active** by default. |
 
 ### Self-preference guard
 
@@ -126,15 +126,38 @@ SAGE_RUN_QDRANT=1 python -m pytest
 
 ## Running with zero API keys (fakes)
 
-You can smoke-test the full pipeline locally without any API keys by using fake providers and FAISS:
+You can run the whole pipeline locally without any API keys using fake providers
+and FAISS. The fake judge emits valid ranking JSON, so retrieval **and** judging
+both run. Because FAISS is in-memory, `seed` and `recommend` must happen in the
+**same process** — so drive it from a short Python script rather than two
+separate CLI calls:
 
 ```bash
 SAGE_EMBEDDING_PROVIDER=fake \
 SAGE_HYDE_PROVIDER=fake \
 SAGE_JUDGE_PROVIDER=fake \
 SAGE_VECTOR_BACKEND=faiss \
-SAGE_ALLOW_SAME_FAMILY_JUDGE=true \
-python -m sage.cli seed tests/fixtures/reviews_sample.jsonl
+python - <<'PY'
+from sage.config import Settings
+from sage.providers.factory import build_embedder, build_llm
+from sage.runtime import build_store
+from sage.ingest import ingest
+from sage.pipeline import recommend
+from sage.vectorstore.base import Filter
+
+s = Settings()
+emb = build_embedder(s)
+store = build_store(s, dim=emb.dim)
+ingest("tests/fixtures/reviews_sample.jsonl", embedder=emb, store=store)
+res = recommend("best gym earbuds", mode="hyde", bias_on=True,
+                flt=Filter(category="earbuds"), embedder=emb, store=store,
+                hyde_llm=build_llm("hyde", s), judge_llm=build_llm("judge", s), settings=s)
+print([(r.rank, r.candidate.product_id, r.candidate.brand) for r in res.ranked])
+PY
 ```
 
-Note: when using all-fake providers you must set `SAGE_ALLOW_SAME_FAMILY_JUDGE=true` because all fake providers share the `fake` family, which would otherwise trigger the self-preference guard in the `recommend-cmd` command.
+To use the **CLI** `recommend-cmd` with all-fake providers, also set
+`SAGE_ALLOW_SAME_FAMILY_JUDGE=true` and use the persistent Qdrant backend (so
+`seed` and `recommend-cmd` share data across processes): all fakes share the
+`fake` family, which would otherwise trip the self-preference guard that
+`recommend-cmd` enforces.
