@@ -1,0 +1,2 @@
+{"review_id": "r1", "product_id": "p1", "brand": "Acme", "category": "earbuds", "price": 80.0, "avg_rating": 4.5, "review_count": 120, "text": "These stay in at the gym and survive sweat."}
+{"review_id": "r2", "product_id": "p2", "brand": "Bolt", "category": "earbuds", "price": 95.0, "avg_rating": 4.2, "review_count": 60, "text": "Great for office calls, clear mic."}
