@@ -1,4 +1,10 @@
+from sage.providers.base import EmbeddingProvider, LLMProvider
 from sage.providers.fakes import FakeLLMProvider, FakeEmbeddingProvider
+
+
+def test_fakes_satisfy_protocols():
+    assert isinstance(FakeLLMProvider(), LLMProvider)
+    assert isinstance(FakeEmbeddingProvider(), EmbeddingProvider)
 
 
 def test_fake_embedding_is_deterministic():
