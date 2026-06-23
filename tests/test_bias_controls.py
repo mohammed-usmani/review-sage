@@ -1,7 +1,10 @@
+import pytest
+
 from sage.models import Candidate
 from sage.judge.bias_controls import (
     blind_brands,
     cap_evidence,
+    normalized_review_count,
     orderings,
 )
 
@@ -18,6 +21,46 @@ def test_blind_brands_strips_names_from_text_and_field():
     assert "Acme" not in " ".join(blinded[0].snippets)
     assert "acme" not in " ".join(blinded[0].snippets).lower()
     assert mapping["Brand-A"] == "Acme"
+
+
+def test_blind_brands_does_not_mutate_input():
+    c = _cand("p1", "Acme", ["Acme buds"])
+    blind_brands([c])
+    assert c.brand == "Acme"  # original untouched
+    assert c.snippets == ["Acme buds"]
+
+
+def test_blind_brands_respects_word_boundaries():
+    # brand "On" must NOT corrupt unrelated words like "Only" / "comfortable"
+    c = _cand("p1", "On", ["On earbuds. Only comfortable for long calls."])
+    blinded, _ = blind_brands([c])
+    text = blinded[0].snippets[0]
+    assert text.startswith("Brand-A earbuds")
+    assert "Only" in text  # not turned into "Brand-Aly"
+    assert "comfortable" in text
+
+
+def test_blind_brands_distinct_labels_per_brand():
+    cands = [_cand("p1", "Acme", ["a"]), _cand("p2", "Bolt", ["b"]), _cand("p3", "Acme", ["c"])]
+    blinded, mapping = blind_brands(cands)
+    assert [b.brand for b in blinded] == ["Brand-A", "Brand-B", "Brand-A"]
+    assert mapping == {"Brand-A": "Acme", "Brand-B": "Bolt"}
+
+
+def test_blind_brands_raises_when_label_pool_exhausted():
+    cands = [_cand(f"p{i}", f"Brand{i}", ["s"]) for i in range(17)]
+    with pytest.raises(ValueError):
+        blind_brands(cands)
+
+
+def test_normalized_review_count_bounds():
+    assert normalized_review_count(0) == 0.0
+    assert normalized_review_count(1000) == 1.0
+    assert normalized_review_count(5000) == 1.0  # capped
+    assert normalized_review_count(500) == 0.5
+    assert normalized_review_count(-10) == 0.0  # clamped, never negative
+    with pytest.raises(ValueError):
+        normalized_review_count(100, cap=0)
 
 
 def test_cap_evidence_limits_snippets_and_chars():
